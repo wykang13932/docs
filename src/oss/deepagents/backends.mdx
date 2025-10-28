@@ -3,34 +3,27 @@ title: Backends
 description: Choose and configure filesystem backends for deep agents. You can specify routes to different backends, implement virtual filesystems, and enforce policies.
 ---
 
-Deep agents expose a filesystem surface to the agent via tools like `ls`, `read_file`, `write_file`, `edit_file`, `glob`, and `grep`. These tools operate through a pluggable backend. This page explains how to choose a backend, route different paths to different backends, implement your own virtual filesystem (for example, S3 or Postgres), add policy hooks, and comply with the backend protocol.
+Deep agents expose a filesystem surface to the agent via tools like `ls`, `read_file`, `write_file`, `edit_file`, `glob`, and `grep`. These tools operate through a pluggable backend.
 
-## Quick start
+This page explains how to [choose a backend](#specify-a-backend), [route different paths to different backends](#route-to-different-backends), [implement your own virtual filesystem](#use-a-virtual-filesystem) (e.g., S3 or Postgres), [add policy hooks](#add-policy-hooks), and [comply with the backend protocol](#protocol-reference).
 
-Here are a few pre-built filesystem backends that you can quickly use with your deep agent.
+## Quickstart
 
-- **Default (ephemeral in state)**
+Here are a few pre-built filesystem backends that you can quickly use with your deep agent:
 
-    `agent = create_deep_agent()`
+ | Built-in backend | Description |
+ |---|---|
+ | [Default](#statebackend-ephemeral) | `agent = create_deep_agent()` <br></br> Ephemeral in state. The default filesystem backend for an agent is stored in `langgraph` state. Note that this filesystem only persists _for a single thread_. |
+ | [Local filesystem persistence](#filesystembackend-local-disk) | `agent = create_deep_agent(backend=FilesystemBackend(root_dir="/Users/nh/Desktop/"))` <br></br>This gives the deep agent access to your local machine's filesystem. You can specify the root directory that the agent has access to. Note that any provided `root_dir` must be an absolute path. |
+ | [Durable store (LangGraph store)](#storebackend-langgraph-store) | `agent = create_deep_agent(backend=lambda rt: StoreBackend(rt))` <br></br>This gives the agent access to long-term storage that is _persisted across threads_. This is great for storing longer term memories or instructions that are applicable to the agent over multiple executions. |
+ | [Composite](#compositebackend-router) | Ephemeral by default, `/memories/` persisted. The Composite backend is maximally flexible. You can specify different routes in the filesystem to point towards different backends. See Composite routing below for a ready-to-paste example. |
 
-    The default filesystem backend for an agent is stored in langgraph state. Note that this filesystem only persists _for a single thread_.
-- **Local filesystem persistence**
 
-    `agent = create_deep_agent(backend=FilesystemBackend(root_dir="/Users/nh/Desktop/"))`
-
-    This gives the deep agent access to your local machine's filesystem. You can specify the root directory that the agent has access to. Note that any provided `root_dir` must be an absolute path.
-- **Durable store (LangGraph Store)**
-
-    `agent = create_deep_agent(backend=lambda rt: StoreBackend(rt))`
-
-    This gives the agent access to long-term storage that is _persisted across threads_. This is great for storing longer term memories or instructions that are applicable to the agent over multiple executions.
-- **Composite (ephemeral by default, `/memories/` persisted)**
-
-    The Composite backend is maximally flexible. You can specify different routes in the filesystem to point towards different backends. See Composite routing below for a ready‑to‑paste example.
-
-## Built‑in backends
+## Built-in backends
 
 ### StateBackend (ephemeral)
+
+:::python
 ```python
 # By default we provide a StateBackend
 agent = create_deep_agent()
@@ -42,6 +35,8 @@ agent = create_deep_agent(
     backend=(lambda rt: StateBackend(rt))   # Note that the tools access State through the runtime.state
 )
 ```
+:::
+
 **How it works:**
 - Stores files in LangGraph agent state for the current thread.
 - Persists across multiple agent turns on the same thread via checkpoints.
@@ -59,6 +54,7 @@ agent = create_deep_agent(
     backend=FilesystemBackend(root_dir="/Users/nh/Desktop/")
 )
 ```
+
 **How it works:**
 - Reads/writes real files under a configurable `root_dir`.
 - Note: `root_dir` must be an absolute path.
@@ -71,6 +67,7 @@ agent = create_deep_agent(
 - Mounted persistent volumes
 
 ### StoreBackend (LangGraph Store)
+
 ```python
 from deepagents.backends import StoreBackend
 
@@ -78,6 +75,7 @@ agent = create_deep_agent(
     backend=(lambda rt: StoreBackend(rt))   # Note that the tools access Store through the runtime.store
 )
 ```
+
 **How it works:**
 - Stores files in a LangGraph `BaseStore` provided by the runtime, enabling cross‑thread durable storage.
 
@@ -88,6 +86,7 @@ agent = create_deep_agent(
 
 ### CompositeBackend (router)
 
+:::python
 ```python
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
@@ -103,6 +102,8 @@ composite_backend = lambda rt: CompositeBackend(
 
 agent = create_deep_agent(backend=composite_backend)
 ```
+:::
+
 **How it works:**
 - Routes file operations to different backends based on path prefix.
 - Preserves the original path prefixes in listings and search results.
@@ -121,7 +122,7 @@ agent = create_deep_agent(backend=composite_backend)
 - If omitted, the default is `lambda rt: StateBackend(rt)`.
 
 
-## Composite routing example
+## Route to different backends
 
 Route parts of the namespace to different backends. Commonly used to persist `/memories/*` and keep everything else ephemeral.
 
@@ -150,17 +151,18 @@ Notes:
 - Longer prefixes win (for example, route `"/memories/projects/"` can override `"/memories/"`).
 - For StoreBackend routing, ensure the agent runtime provides a store (`runtime.store`).
 
-## Virtual filesystem: S3, Postgres, …
+## Use a virtual filesystem
 
-Build a custom backend to project a remote or database filesystem into the tools namespace.
+Build a custom backend to project a remote or database filesystem (e.g., S3 or Postgres) into the tools namespace.
 
 Design guidelines:
-- Paths are absolute (`/x/y.txt`). Decide how to map them to your storage keys/rows.
-- Implement `ls_info` and `glob_info` efficiently (server‑side listing where available, otherwise local filter).
-- Return user‑readable error strings for missing files or invalid regex patterns.
-- For external persistence, set `files_update=None` in results; only in‑state backends should return a `files_update` dict.
 
-S3‑style skeleton:
+- Paths are absolute (`/x/y.txt`). Decide how to map them to your storage keys/rows.
+- Implement `ls_info` and `glob_info` efficiently (server-side listing where available, otherwise local filter).
+- Return user-readable error strings for missing files or invalid regex patterns.
+- For external persistence, set `files_update=None` in results; only in-state backends should return a `files_update` dict.
+
+S3-style outline:
 
 :::python
 ```python
@@ -201,14 +203,15 @@ class S3Backend(BackendProtocol):
 ```
 :::
 
-Postgres‑style outline:
+Postgres-style outline:
+
 - Table `files(path text primary key, content text, created_at timestamptz, modified_at timestamptz)`
 - Map tool operations onto SQL:
   - `ls_info` uses `WHERE path LIKE $1 || '%'`
   - `glob_info` filter in SQL or fetch then apply glob in Python
   - `grep_raw` can fetch candidate rows by extension or last modified time, then scan lines
 
-## Hooks and policy enforcement
+## Add policy hooks
 
 Enforce enterprise rules by subclassing or wrapping a backend.
 
@@ -284,7 +287,7 @@ Required endpoints:
 - `glob_info(pattern: str, path: str = "/") -> list[FileInfo]`
   - Return matched files as `FileInfo` entries (empty list if none).
 - `write(file_path: str, content: str) -> WriteResult`
-  - Create‑only. On conflict, return `WriteResult(error=...)`. On success, set `path` and for state backends set `files_update={...}`; external backends should use `files_update=None`.
+  - Create-only. On conflict, return `WriteResult(error=...)`. On success, set `path` and for state backends set `files_update={...}`; external backends should use `files_update=None`.
 - `edit(file_path: str, old_string: str, new_string: str, replace_all: bool = False) -> EditResult`
   - Enforce uniqueness of `old_string` unless `replace_all=True`. If not found, return error. Include `occurrences` on success.
 
