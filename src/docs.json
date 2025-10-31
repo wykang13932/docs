@@ -241,6 +241,7 @@
                   {
                     "group": "LangGraph APIs",
                     "pages": [
+                        "oss/python/langgraph/choosing-apis",
                         {
                           "group": "Graph API",
                           "pages": [
@@ -578,6 +579,7 @@
                   {
                     "group": "LangGraph APIs",
                     "pages": [
+                      "oss/javascript/langgraph/choosing-apis",
                       {
                         "group": "Graph API",
                         "pages": [
