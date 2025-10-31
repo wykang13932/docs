@@ -1435,7 +1435,7 @@
       "destination": "/langsmith/home"
     },
     {
-      "source": "/langsmith/hosting",
+      "source": "/langsmith/platform-setup",
       "destination": "/langsmith/platform-setup"
     },
     {
@@ -1512,7 +1512,7 @@
     },
     {
       "source": "/langgraph-platform/deployment-options",
-      "destination": "/langsmith/hosting"
+      "destination": "/langsmith/platform-setup"
     },
     {
       "source": "/langgraph-platform/langgraph-studio",
